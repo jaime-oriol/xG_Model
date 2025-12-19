@@ -6,13 +6,26 @@ import pandas as pd
 from pathlib import Path
 from typing import List, Dict
 
-def load_shot_events(data_dir: str = "data/raw") -> pd.DataFrame:
+def load_shot_events(data_dir: str = "data/raw", use_cache: bool = True) -> pd.DataFrame:
     """
     Load all shot events from StatsBomb data
+
+    Args:
+        data_dir: Directory with raw StatsBomb data
+        use_cache: If True, use cached parquet if available
 
     Returns:
         DataFrame with one row per shot
     """
+    cache_file = Path("data/processed/shots_cache.parquet")
+
+    # Try cache first
+    if use_cache and cache_file.exists():
+        print(f"Loading from cache: {cache_file}")
+        return pd.read_parquet(cache_file)
+
+    # Load from JSONs
+    print("Loading from JSONs (this will take ~5 min)...")
     data_path = Path(data_dir)
     events_dir = data_path / "events"
 
@@ -33,6 +46,12 @@ def load_shot_events(data_dir: str = "data/raw") -> pd.DataFrame:
             shots.append(shot_data)
 
     df = pd.DataFrame(shots)
+
+    # Save cache
+    cache_file.parent.mkdir(exist_ok=True)
+    df.to_parquet(cache_file, index=False)
+    print(f"Saved cache: {cache_file}")
+
     return df
 
 def _extract_shot_data(event: Dict) -> Dict:

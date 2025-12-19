@@ -67,16 +67,18 @@ def train_baseline_model():
     }
 
     # Monotonicity constraints
-    constraints = {}
-    for i, col in enumerate(feature_cols):
+    constraints = []
+    for col in feature_cols:
         if col == 'distance_to_goal':
-            constraints[i] = -1
+            constraints.append(-1)
         elif col == 'angle_to_goal':
-            constraints[i] = 1
+            constraints.append(1)
         elif col == 'distance_to_goal_line':
-            constraints[i] = -1
+            constraints.append(-1)
+        else:
+            constraints.append(0)
 
-    params['monotone_constraints'] = constraints
+    params['monotone_constraints'] = tuple(constraints)
 
     dtrain = xgb.DMatrix(X, label=y, feature_names=feature_cols)
 
