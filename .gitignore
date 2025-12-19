@@ -1,8 +1,13 @@
-# Data files
-data/
 
 # Project docs
 CLAUDE.md
+
+# Data files
+data/raw/
+data/processed/
+models/*.json
+models/*.pkl
+outputs/
 
 # Python
 __pycache__/
