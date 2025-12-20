@@ -18,4 +18,3 @@ shot_type_Corner
 shot_type_Free Kick
 shot_type_Kick Off
 shot_type_Open Play
-shot_type_Penalty

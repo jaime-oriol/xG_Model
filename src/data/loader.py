@@ -47,6 +47,24 @@ def load_shot_events(data_dir: str = "data/raw", use_cache: bool = True) -> pd.D
 
     df = pd.DataFrame(shots)
 
+    # Clean data
+    initial_count = len(df)
+
+    # Filter penalties (constant xG ~0.78, sesgan coeficientes)
+    df = df[df['shot_type'] != 'Penalty']
+
+    # Filter shots hacia portería incorrecta (X < 60)
+    df = df[df['x'] >= 60]
+
+    # Filter shots sin coordenadas válidas
+    df = df[df['x'].notna() & df['y'].notna()]
+
+    df = df.reset_index(drop=True)
+
+    filtered_count = initial_count - len(df)
+    print(f"Filtered {filtered_count} shots (penalties, X<60, invalid coords)")
+    print(f"Clean shots: {len(df)}")
+
     # Save cache
     cache_file.parent.mkdir(exist_ok=True)
     df.to_pickle(cache_file)
