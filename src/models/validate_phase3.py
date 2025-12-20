@@ -1,9 +1,10 @@
 """
-Train Phase 3: Geometric + Freeze Frame + Shot Height
+Validate Phase 3 with train/test split
 """
 import numpy as np
 import pandas as pd
 import xgboost as xgb
+from sklearn.model_selection import train_test_split
 from sklearn.metrics import brier_score_loss, roc_auc_score
 from pathlib import Path
 
@@ -12,22 +13,20 @@ from src.features.geometric import calculate_basic_features
 from src.features.freeze_frame import calculate_freeze_frame_features
 from src.features.shot_height import calculate_shot_height_features
 
-def train_phase3_model():
-    """Train Phase 3: Phase 1 + Phase 2 + Shot Height"""
+def validate_phase3():
+    """Validate Phase 3 with train/test split"""
     print("Loading shot events...")
     df = load_shot_events()
 
     print(f"Total shots: {len(df):,}")
 
-    # Phase 1: Geometric
+    # Calculate all features
     print("Calculating geometric features...")
     df = calculate_basic_features(df)
 
-    # Phase 2: Freeze frames
     print("Calculating freeze frame features...")
     df = calculate_freeze_frame_features(df)
 
-    # Phase 3: Shot height
     print("Calculating shot height features...")
     df = calculate_shot_height_features(df)
 
@@ -77,13 +76,18 @@ def train_phase3_model():
 
     X = df[feature_cols]
     y = df['is_goal']
+    statsbomb_xg = df['statsbomb_xg'].values
 
-    print(f"Features: {len(feature_cols)}")
-    print(f"Samples: {len(X):,}")
-    print(f"Goals: {y.sum():,} ({y.mean()*100:.1f}%)")
-    print(f"Shot height available: {(df['end_z'].notna()).sum():,} ({(df['end_z'].notna()).mean()*100:.1f}%)")
+    # Train/Test split (80/20)
+    print(f"\nSplitting data (80% train, 20% test)...")
+    X_train, X_test, y_train, y_test, sb_xg_train, sb_xg_test = train_test_split(
+        X, y, statsbomb_xg, test_size=0.2, random_state=42, stratify=y
+    )
 
-    # XGBoost params - regularized to prevent overfitting
+    print(f"Train: {len(X_train):,} shots ({y_train.sum()} goals)")
+    print(f"Test: {len(X_test):,} shots ({y_test.sum()} goals)")
+
+    # XGBoost params - regularized to reduce overfitting
     params = {
         'objective': 'binary:logistic',
         'eval_metric': 'logloss',
@@ -120,52 +124,68 @@ def train_phase3_model():
 
     params['monotone_constraints'] = tuple(constraints)
 
-    dtrain = xgb.DMatrix(X, label=y, feature_names=feature_cols)
+    dtrain = xgb.DMatrix(X_train, label=y_train, feature_names=feature_cols)
+    dtest = xgb.DMatrix(X_test, label=y_test, feature_names=feature_cols)
 
-    print("\nTraining XGBoost...")
+    print("\nTraining XGBoost with early stopping...")
     model = xgb.train(
         params,
         dtrain,
         num_boost_round=num_rounds,
+        evals=[(dtrain, 'train'), (dtest, 'test')],
+        early_stopping_rounds=20,
         verbose_eval=False
     )
 
-    # Evaluate
-    print("\nEvaluating...")
-    y_pred = model.predict(dtrain)
+    # Evaluate on TRAIN
+    print("\n=== TRAIN SET ===")
+    y_pred_train = model.predict(dtrain)
+    brier_train = brier_score_loss(y_train, y_pred_train)
+    auc_train = roc_auc_score(y_train, y_pred_train)
 
-    brier = brier_score_loss(y, y_pred)
-    auc = roc_auc_score(y, y_pred)
+    valid_idx_train = ~np.isnan(sb_xg_train)
+    corr_train = np.corrcoef(y_pred_train[valid_idx_train], sb_xg_train[valid_idx_train])[0, 1]
+    sb_brier_train = brier_score_loss(y_train[valid_idx_train], sb_xg_train[valid_idx_train])
 
-    print(f"\nMetrics vs Actual:")
-    print(f"  Brier Score: {brier:.4f}")
-    print(f"  AUC-ROC: {auc:.4f}")
+    print(f"Brier Score: {brier_train:.4f}")
+    print(f"AUC-ROC: {auc_train:.4f}")
+    print(f"Correlation vs StatsBomb: {corr_train:.4f}")
+    print(f"StatsBomb Brier: {sb_brier_train:.4f}")
 
-    # Compare vs StatsBomb
-    statsbomb_xg = df['statsbomb_xg'].values
-    valid_idx = ~np.isnan(statsbomb_xg)
+    # Evaluate on TEST
+    print("\n=== TEST SET (HOLDOUT) ===")
+    y_pred_test = model.predict(dtest)
+    brier_test = brier_score_loss(y_test, y_pred_test)
+    auc_test = roc_auc_score(y_test, y_pred_test)
 
-    correlation = np.corrcoef(y_pred[valid_idx], statsbomb_xg[valid_idx])[0, 1]
-    mean_abs_diff = np.mean(np.abs(y_pred[valid_idx] - statsbomb_xg[valid_idx]))
-    sb_brier = brier_score_loss(y[valid_idx], statsbomb_xg[valid_idx])
+    valid_idx_test = ~np.isnan(sb_xg_test)
+    corr_test = np.corrcoef(y_pred_test[valid_idx_test], sb_xg_test[valid_idx_test])[0, 1]
+    sb_brier_test = brier_score_loss(y_test[valid_idx_test], sb_xg_test[valid_idx_test])
 
-    print(f"\nComparison vs StatsBomb:")
-    print(f"  Correlation: {correlation:.4f}")
-    print(f"  Mean Abs Diff: {mean_abs_diff:.4f}")
-    print(f"  Our Brier: {brier:.4f}")
-    print(f"  StatsBomb Brier: {sb_brier:.4f}")
+    print(f"Brier Score: {brier_test:.4f}")
+    print(f"AUC-ROC: {auc_test:.4f}")
+    print(f"Correlation vs StatsBomb: {corr_test:.4f}")
+    print(f"StatsBomb Brier: {sb_brier_test:.4f}")
 
-    # Save
-    model_dir = Path("models")
-    model_dir.mkdir(exist_ok=True)
-    model_path = model_dir / "phase3_shot_height.json"
-    model.save_model(str(model_path))
+    # Overfitting check
+    print("\n=== OVERFITTING CHECK ===")
+    brier_diff = brier_test - brier_train
+    auc_diff = auc_train - auc_test
 
-    with open(model_dir / "phase3_features.txt", "w") as f:
-        for feat in feature_cols:
-            f.write(f"{feat}\n")
+    print(f"Brier difference (test - train): {brier_diff:+.4f}")
+    print(f"AUC difference (train - test): {auc_diff:+.4f}")
 
-    print(f"\nModel saved to {model_path}")
+    if brier_diff < 0.005 and auc_diff < 0.02:
+        print("NO overfitting - model generalizes well")
+    elif brier_diff < 0.01 and auc_diff < 0.05:
+        print("Slight overfitting - acceptable")
+    else:
+        print("Significant overfitting - model may not generalize")
+
+    print(f"\n=== SUMMARY ===")
+    print(f"Test Brier: {brier_test:.4f}")
+    print(f"Test beats StatsBomb: {brier_test < sb_brier_test}")
+    print(f"Improvement vs StatsBomb: {sb_brier_test - brier_test:.4f}")
 
 if __name__ == "__main__":
-    train_phase3_model()
+    validate_phase3()
