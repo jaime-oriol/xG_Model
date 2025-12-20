@@ -12,17 +12,17 @@ def load_shot_events(data_dir: str = "data/raw", use_cache: bool = True) -> pd.D
 
     Args:
         data_dir: Directory with raw StatsBomb data
-        use_cache: If True, use cached parquet if available
+        use_cache: If True, use cached pickle if available
 
     Returns:
         DataFrame with one row per shot
     """
-    cache_file = Path("data/processed/shots_cache.parquet")
+    cache_file = Path("data/processed/shots_cache.pkl")
 
     # Try cache first
     if use_cache and cache_file.exists():
         print(f"Loading from cache: {cache_file}")
-        return pd.read_parquet(cache_file)
+        return pd.read_pickle(cache_file)
 
     # Load from JSONs
     print("Loading from JSONs (this will take ~5 min)...")
@@ -49,7 +49,7 @@ def load_shot_events(data_dir: str = "data/raw", use_cache: bool = True) -> pd.D
 
     # Save cache
     cache_file.parent.mkdir(exist_ok=True)
-    df.to_parquet(cache_file, index=False)
+    df.to_pickle(cache_file)
     print(f"Saved cache: {cache_file}")
 
     return df
