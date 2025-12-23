@@ -92,7 +92,13 @@ def train_phase2_model():
             constraints.append(-1)
         elif col == 'angle_to_goal':
             constraints.append(1)
+        elif col == 'y_deviation':
+            constraints.append(-1)
         elif col == 'distance_to_goal_line':
+            constraints.append(-1)
+        elif col == 'keeper_lateral_deviation':
+            constraints.append(1)
+        elif col == 'keeper_cone_blocked':
             constraints.append(-1)
         elif col == 'defenders_in_triangle':
             constraints.append(-1)

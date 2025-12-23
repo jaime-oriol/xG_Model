@@ -73,6 +73,8 @@ def train_baseline_model():
             constraints.append(-1)
         elif col == 'angle_to_goal':
             constraints.append(1)
+        elif col == 'y_deviation':
+            constraints.append(-1)
         elif col == 'distance_to_goal_line':
             constraints.append(-1)
         else:

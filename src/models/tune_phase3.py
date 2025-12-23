@@ -62,10 +62,37 @@ def tune_phase3():
         'min_child_weight': [1, 3, 5],
     }
 
-    # XGBoost classifier
+    # Monotonicity constraints
+    constraints = []
+    for col in feature_cols:
+        if col == 'distance_to_goal':
+            constraints.append(-1)
+        elif col == 'angle_to_goal':
+            constraints.append(1)
+        elif col == 'y_deviation':
+            constraints.append(-1)
+        elif col == 'distance_to_goal_line':
+            constraints.append(-1)
+        elif col == 'keeper_lateral_deviation':
+            constraints.append(1)
+        elif col == 'keeper_cone_blocked':
+            constraints.append(-1)
+        elif col == 'defenders_in_triangle':
+            constraints.append(-1)
+        elif col == 'closest_defender_distance':
+            constraints.append(1)
+        elif col == 'defenders_within_5m':
+            constraints.append(-1)
+        elif col == 'defenders_in_shooting_lane':
+            constraints.append(-1)
+        else:
+            constraints.append(0)
+
+    # XGBoost classifier with monotonicity constraints
     xgb_model = xgb.XGBClassifier(
         objective='binary:logistic',
         eval_metric='logloss',
+        monotone_constraints=tuple(constraints),
         random_state=42
     )
 

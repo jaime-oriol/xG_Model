@@ -6,18 +6,21 @@ import pandas as pd
 from pathlib import Path
 from typing import List, Dict, Optional
 
+# Get project root (3 levels up from this file: src/data/loader.py -> src/data -> src -> root)
+PROJECT_ROOT = Path(__file__).parent.parent.parent
+
 def load_shot_events(data_dir: str = "data/raw", use_cache: bool = True) -> pd.DataFrame:
     """
     Load all shot events from StatsBomb data
 
     Args:
-        data_dir: Directory with raw StatsBomb data
+        data_dir: Directory with raw StatsBomb data (relative to project root)
         use_cache: If True, use cached pickle if available
 
     Returns:
         DataFrame with one row per shot
     """
-    cache_file = Path("data/processed/shots_cache.pkl")
+    cache_file = PROJECT_ROOT / "data/processed/shots_cache.pkl"
 
     # Try cache first
     if use_cache and cache_file.exists():
@@ -26,7 +29,7 @@ def load_shot_events(data_dir: str = "data/raw", use_cache: bool = True) -> pd.D
 
     # Load from JSONs
     print("Loading from JSONs (this will take ~5 min)...")
-    data_path = Path(data_dir)
+    data_path = PROJECT_ROOT / data_dir
     events_dir = data_path / "events"
 
     shots = []
@@ -118,13 +121,13 @@ def load_shot_events_with_360(data_dir: str = "data/raw", use_cache: bool = True
     Load shot events with 360 data merged
 
     Args:
-        data_dir: Directory with raw StatsBomb data
+        data_dir: Directory with raw StatsBomb data (relative to project root)
         use_cache: If True, use cached pickle if available
 
     Returns:
         DataFrame with shots + 360 features (where available)
     """
-    cache_file = Path("data/processed/shots_360_cache.pkl")
+    cache_file = PROJECT_ROOT / "data/processed/shots_360_cache.pkl"
 
     if use_cache and cache_file.exists():
         print(f"Loading from cache: {cache_file}")
@@ -135,7 +138,7 @@ def load_shot_events_with_360(data_dir: str = "data/raw", use_cache: bool = True
 
     # Load 360 data
     print("Loading 360 data...")
-    data_path = Path(data_dir)
+    data_path = PROJECT_ROOT / data_dir
     three_sixty_dir = data_path / "three-sixty"
 
     if not three_sixty_dir.exists():
