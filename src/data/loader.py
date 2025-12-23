@@ -4,7 +4,7 @@ Load and parse StatsBomb shot events
 import json
 import pandas as pd
 from pathlib import Path
-from typing import List, Dict
+from typing import List, Dict, Optional
 
 def load_shot_events(data_dir: str = "data/raw", use_cache: bool = True) -> pd.DataFrame:
     """
@@ -112,3 +112,76 @@ def _extract_shot_data(event: Dict) -> Dict:
         'has_freeze_frame': 'freeze_frame' in shot,
         'freeze_frame': shot.get('freeze_frame'),
     }
+
+def load_shot_events_with_360(data_dir: str = "data/raw", use_cache: bool = True) -> pd.DataFrame:
+    """
+    Load shot events with 360 data merged
+
+    Args:
+        data_dir: Directory with raw StatsBomb data
+        use_cache: If True, use cached pickle if available
+
+    Returns:
+        DataFrame with shots + 360 features (where available)
+    """
+    cache_file = Path("data/processed/shots_360_cache.pkl")
+
+    if use_cache and cache_file.exists():
+        print(f"Loading from cache: {cache_file}")
+        return pd.read_pickle(cache_file)
+
+    # Load base shots
+    df = load_shot_events(data_dir=data_dir, use_cache=use_cache)
+
+    # Load 360 data
+    print("Loading 360 data...")
+    data_path = Path(data_dir)
+    three_sixty_dir = data_path / "three-sixty"
+
+    if not three_sixty_dir.exists():
+        print("No 360 data directory found")
+        df['visible_area_360'] = None
+        df['freeze_frame_360'] = None
+        return df
+
+    # Build mapping of event_id -> 360 data
+    three_sixty_map = {}
+
+    for match_file in three_sixty_dir.glob("*.json"):
+        with open(match_file) as f:
+            events_360 = json.load(f)
+
+        for event_360 in events_360:
+            event_uuid = event_360.get('event_uuid')
+            if event_uuid:
+                three_sixty_map[event_uuid] = {
+                    'visible_area': event_360.get('visible_area'),
+                    'freeze_frame': event_360.get('freeze_frame'),
+                }
+
+    print(f"Loaded 360 data for {len(three_sixty_map)} events")
+
+    # Merge 360 data with shots
+    df['visible_area_360'] = None
+    df['freeze_frame_360'] = None
+
+    matched = 0
+    for idx, row in df.iterrows():
+        event_id = row['event_id']
+        if event_id in three_sixty_map:
+            df.at[idx, 'visible_area_360'] = three_sixty_map[event_id]['visible_area']
+            df.at[idx, 'freeze_frame_360'] = three_sixty_map[event_id]['freeze_frame']
+            matched += 1
+
+    print(f"Matched 360 data for {matched} / {len(df)} shots ({matched/len(df)*100:.1f}%)")
+
+    # Rename base coordinates
+    df['shot_x'] = df['x']
+    df['shot_y'] = df['y']
+
+    # Save cache
+    cache_file.parent.mkdir(exist_ok=True)
+    df.to_pickle(cache_file)
+    print(f"Saved cache: {cache_file}")
+
+    return df
