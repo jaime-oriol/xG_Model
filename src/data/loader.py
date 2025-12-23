@@ -38,6 +38,9 @@ def load_shot_events(data_dir: str = "data/raw", use_cache: bool = True) -> pd.D
         if event_file.name == "summary.json":
             continue
 
+        # Extract match_id from filename
+        match_id = int(event_file.stem)
+
         with open(event_file) as f:
             events = json.load(f)
 
@@ -45,7 +48,7 @@ def load_shot_events(data_dir: str = "data/raw", use_cache: bool = True) -> pd.D
             if event.get('type', {}).get('name') != 'Shot':
                 continue
 
-            shot_data = _extract_shot_data(event)
+            shot_data = _extract_shot_data(event, match_id)
             shots.append(shot_data)
 
     df = pd.DataFrame(shots)
@@ -75,7 +78,7 @@ def load_shot_events(data_dir: str = "data/raw", use_cache: bool = True) -> pd.D
 
     return df
 
-def _extract_shot_data(event: Dict) -> Dict:
+def _extract_shot_data(event: Dict, match_id: int) -> Dict:
     """Extract relevant fields from shot event"""
     shot = event.get('shot', {})
     location = event.get('location', [None, None])
@@ -83,7 +86,7 @@ def _extract_shot_data(event: Dict) -> Dict:
 
     return {
         # IDs
-        'match_id': event.get('match_id'),
+        'match_id': match_id,
         'event_id': event.get('id'),
 
         # Location
