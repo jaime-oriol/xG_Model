@@ -13,10 +13,6 @@ from src.features.geometric import calculate_basic_features
 from src.features.freeze_frame import calculate_freeze_frame_features
 from src.features.shot_height import calculate_shot_height_features
 
-def brier_score(y_true, y_pred):
-    """Brier score for scorer (negative for minimization)"""
-    return -brier_score_loss(y_true, y_pred)
-
 def tune_phase3():
     """Hyperparameter tuning for Phase 3"""
     print("Loading and preparing data...")
@@ -70,8 +66,7 @@ def tune_phase3():
     xgb_model = xgb.XGBClassifier(
         objective='binary:logistic',
         eval_metric='logloss',
-        random_state=42,
-        use_label_encoder=False
+        random_state=42
     )
 
     # Cross-validation
@@ -83,7 +78,7 @@ def tune_phase3():
         xgb_model,
         param_distributions,
         n_iter=50,
-        scoring=make_scorer(brier_score, greater_is_better=True, needs_proba=True),
+        scoring='neg_brier_score',
         cv=cv,
         random_state=42,
         n_jobs=-1,
