@@ -5,9 +5,11 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib as mpl
+import matplotlib.colors as mcolors
 from mplsoccer import VerticalPitch
 import xgboost as xgb
 from pathlib import Path
+from PIL import Image
 
 # Field constants (StatsBomb coordinates)
 PITCH_LENGTH_X = 120.0
@@ -91,15 +93,21 @@ def plot_xg_heatmap(model_path='models/phase1_baseline.json',
     mpl.rcParams['xtick.labelsize'] = 10
     mpl.rcParams['ytick.labelsize'] = 10
 
+    # Custom colormap: blanco → azul corporativo
+    corporate_blue = '#1E3A8A'
+    colors = ['white', corporate_blue]
+    n_bins = 100
+    cmap = mcolors.LinearSegmentedColormap.from_list('white_blue', colors, N=n_bins)
+
     pitch = VerticalPitch(half=True, pitch_color='#313332', line_color='white', linewidth=1, stripe=False)
     fig, ax = pitch.grid(nrows=1, ncols=2, grid_height=0.75, space=0.1, axis=False)
     fig.set_size_inches(10, 5.5)
     fig.set_facecolor('#313332')
 
     pos1 = ax['pitch'][0].imshow(prob_goal_grnd, extent=(0, 80, 60, 120), aspect='equal',
-                                  vmin=-0.04, vmax=0.4, cmap=plt.cm.inferno)
+                                  vmin=-0.04, vmax=0.4, cmap=cmap)
     pos2 = ax['pitch'][1].imshow(prob_goal_head, extent=(0, 80, 60, 120), aspect='equal',
-                                  vmin=-0.04, vmax=0.4, cmap=plt.cm.inferno)
+                                  vmin=-0.04, vmax=0.4, cmap=cmap)
 
     cs1 = ax['pitch'][0].contour(prob_goal_grnd, extent=(0, 80, 60, 120),
                                   levels=[0.01, 0.05, 0.2, 0.5],
@@ -119,6 +127,14 @@ def plot_xg_heatmap(model_path='models/phase1_baseline.json',
     cbar.ax.set_ylabel('xG', loc="bottom", color="white", fontweight="bold", rotation=0, labelpad=20)
 
     fig.text(0.255, 0.09, "Created by Jaime Oriol", fontstyle="italic", ha="center", fontsize=9, color="white")
+
+    # Logo
+    logo_path = Path("src/logo/logo_blanco.png")
+    if logo_path.exists():
+        logo = Image.open(logo_path)
+        ax_logo = fig.add_axes([0.88, 0.88, 0.1, 0.1], anchor='NE', zorder=1)
+        ax_logo.imshow(logo)
+        ax_logo.axis('off')
 
     plt.tight_layout()
     return fig

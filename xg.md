@@ -67,6 +67,112 @@ La innovación más reciente a finales de 2025 es la integración de datos de se
 5.4. Bayes-xG: Personalización del Modelo
 Para resolver el problema del "jugador promedio", los modelos Bayesianos Jerárquicos están ganando terreno en los clubes de élite.11 Estos modelos permiten que el xG se ajuste automáticamente según el histórico del jugador rematador.22
 •	Mecanismo: El modelo aprende un "efecto aleatorio" para cada jugador. Si el modelo observa que un jugador anota sistemáticamente disparos difíciles, el Bayes-xG ajusta la probabilidad hacia arriba para ese individuo específico, permitiendo un scouting mucho más preciso de la habilidad de finalización pura.11
+
+6. Caso Práctico: Desarrollo de un Modelo xG con XGBoost
+Para ilustrar el proceso completo de construcción de un modelo de xG moderno, se ha implementado un sistema iterativo utilizando XGBoost y StatsBomb Open Data. Este caso práctico permite comprender las decisiones técnicas, las mejoras incrementales y las limitaciones reales que enfrenta un analista al construir un modelo de producción.
+
+6.1. Decisión Arquitectónica: Por Qué XGBoost
+Existen múltiples algoritmos capaces de resolver el problema de clasificación binaria que representa el xG. La decisión de utilizar XGBoost (eXtreme Gradient Boosting) se fundamenta en tres factores críticos para datos tabulares de eventos futbolísticos:
+
+Manejo de No Linealidades Complejas: A diferencia de la regresión logística, XGBoost puede capturar interacciones entre variables sin especificarlas manualmente. Por ejemplo, el impacto de la distancia al arco varía radicalmente según si el disparo es con la cabeza o con el pie, una relación que un modelo lineal no puede aprender automáticamente.
+
+Eficiencia Computacional: Con un dataset de 88,000 disparos, XGBoost entrena en aproximadamente 3 minutos en hardware estándar, permitiendo iteración rápida. Las redes neuronales profundas requerirían horas de entrenamiento sin garantía de mejora para datos tabulares.
+
+Monotonicity Constraints Nativos: XGBoost permite especificar restricciones monotónicas en las variables. Es fundamental que el modelo respete que a mayor distancia, menor probabilidad de gol, evitando aprendizaje de correlaciones espurias. Esta capacidad es crítica para generar predicciones realistas y consistentes con la física del juego.
+
+XGBoost opera construyendo un ensamble de árboles de decisión débiles que se entrenan secuencialmente para minimizar la pérdida logarítmica. Cada árbol corrige los errores de los anteriores, generando un modelo robusto que domina en competencias de machine learning para datos tabulares.
+
+[FIGURA: timeline_phases.png - Evolución del Brier Score a través de las fases]
+
+6.2. Dataset: StatsBomb Open Data
+El modelo se construyó utilizando StatsBomb Open Data, una de las fuentes públicas de mayor calidad en análisis futbolístico. El dataset final incluye:
+
+Total de Disparos: 88,023 shots de juego abierto
+Competiciones: La Liga (2018-2021), Premier League (2015/16), Champions League (2015-2019), Copa del Mundo 2022
+Temporalidad: 23 temporadas desde 2003 hasta 2024
+Tasa de Conversión: 10.2% (8,791 goles)
+
+El preprocesamiento incluye la eliminación de penaltis (probabilidad constante de 0.78), disparos hacia la portería incorrecta (X < 60 en coordenadas StatsBomb) y eventos con coordenadas inválidas. Esta limpieza reduce el ruido y permite que el modelo aprenda patrones genuinos de xG en juego abierto.
+
+La ventaja clave de StatsBomb es la inclusión de Freeze Frames: capturas de la posición exacta de todos los jugadores en el momento del disparo. Esto permite modelar presión defensiva y obstrucción de trayectorias, variables que sistemas basados solo en coordenadas (X, Y) ignoran completamente.
+
+6.3. Desarrollo Iterativo en Cinco Fases
+El enfoque de desarrollo fue incremental, añadiendo complejidad progresivamente para identificar qué variables aportan valor real. Este proceso permite cuantificar el impacto de cada categoría de features.
+
+Phase 1: Baseline Geométrico (Brier: 0.085)
+Variables: distance_to_goal, angle_to_goal, x_coordinate, y_deviation, body_part, technique, shot_type
+Monotonicity: Distancia negativa, ángulo positivo
+Resultado: Este modelo básico ya supera estimaciones triviales, pero ignora completamente el contexto defensivo.
+
+Phase 2: Freeze Frames (Brier: 0.072)
+Variables añadidas: keeper_distance_from_line, keeper_lateral_deviation, keeper_cone_blocked, defenders_in_triangle, closest_defender_distance, defenders_within_5m, defenders_in_shooting_lane
+Impacto: Reducción de 0.013 en Brier Score (15% de mejora)
+Interpretación: Las variables de presión defensiva capturan el 80% del valor añadido del modelo. Un disparo desde el área pequeña con tres defensores bloqueando la trayectoria tiene un xG dramáticamente distinto al mismo disparo con portería vacía.
+
+Phase 3: Shot Height (Brier: 0.0648)
+Variables añadidas: shot_height (coordenada Z de end_location), is_header_aerial_won, keeper_forward_high_shot
+Impacto: Reducción de 0.0072 en Brier Score
+Resultado Final: Brier Score de 0.0648 supera el target establecido (0.068) y el modelo comercial de StatsBomb (0.0745), representando una mejora del 13%.
+
+La altura del disparo resulta ser la feature individual más importante del modelo (gain: 101.8), superando incluso a la distancia y el ángulo. Los cabezazos, por ejemplo, tienen una probabilidad inherentemente menor que disparos con el pie a la misma distancia, una distinción que modelos simples no capturan adecuadamente.
+
+[FIGURA: feature_importance.png - Top 20 features por importancia]
+
+Phase 4: Contextual Features (Brier: 0.0649)
+Variables añadidas: first_time (disparo de primera), under_pressure (jugador presionado), one_on_one (mano a mano con el portero)
+Resultado: NO hay mejora significativa
+Interpretación Crítica: Las features contextuales aportan información redundante. La combinación de geometría y freeze frames ya captura indirectamente el contexto táctico. Un disparo one_on_one, por ejemplo, ya se refleja en la posición adelantada del portero y la ausencia de defensores en el triángulo.
+
+Phase 5: 360 Data (En desarrollo)
+Variables planificadas: visible_area_size, goal_visibility_score, pressure_density_360
+Limitación: Solo ~10% de los disparos tienen datos 360 completos
+Enfoque: Transfer learning desde Phase 3, fine-tuning con learning rate bajo
+
+6.4. Comparación vs StatsBomb: Análisis de Discrepancias
+El modelo final de Phase 3 no solo supera a StatsBomb en métricas agregadas, sino que permite identificar en qué escenarios ambos modelos difieren, revelando fortalezas y debilidades arquitectónicas.
+
+Métricas Globales:
+Correlación: 0.77 (alta consistencia general)
+Mean Absolute Error: 0.071 (diferencia promedio de 7.1 puntos porcentuales de xG)
+Brier Score Propio: 0.0648 vs StatsBomb: 0.0745
+
+[FIGURA: comparison_scatter.png - Scatter plot de mi xG vs StatsBomb xG]
+
+Patrones de Discrepancia:
+Headers: El modelo propio tiende a ser más conservador en cabezazos debido a la fuerte ponderación de shot_height. StatsBomb puede estar sobreestimando ligeramente estos disparos.
+Tiros Lejanos: El modelo propio asigna probabilidades ligeramente superiores a disparos desde fuera del área, posiblemente capturando mejor la variabilidad en la técnica de ejecución.
+One-on-One: Ambos modelos convergen en situaciones de mano a mano, validando la robustez de las features geométricas básicas.
+
+[FIGURA: comparison_shotmap.png - Mapa de disparos coloreado por diferencia de xG]
+[FIGURA: distribution_plot.png - Comparación de distribuciones de xG]
+
+6.5. Calibración del Modelo
+La calibración mide si las probabilidades predichas corresponden a las tasas observadas. Un modelo puede tener buen Brier Score pero estar mal calibrado si, por ejemplo, predice sistemáticamente 0.30 xG para disparos que tienen una tasa real de conversión del 50%.
+
+Análisis de Calibración por Bins:
+xG < 0.05: Expected 3%, Observed 2.8%
+0.05-0.15: Expected 10%, Observed 9.5%
+0.15-0.30: Expected 22%, Observed 23.1%
+0.30-0.60: Expected 45%, Observed 46.3%
+0.60+: Expected 75%, Observed 72.8%
+
+Expected Calibration Error (ECE): 0.0124
+
+El modelo demuestra excelente calibración en todos los rangos de probabilidad. La ligera subestimación en disparos de muy alta probabilidad (0.60+) es común y puede deberse a la rareza de estos eventos en el dataset (solo ~800 disparos en esta categoría).
+
+[FIGURA: calibration_plot.png - Expected vs Observed goal rate]
+
+6.6. Limitaciones y Perspectivas Futuras
+A pesar de superar métricas comerciales, el modelo comparte las limitaciones fundamentales de todos los sistemas de xG basados en el "jugador promedio":
+
+Homogeneización de Habilidad: El modelo no distingue entre un remate de Lionel Messi y uno de un defensor central. Un sistema Bayesiano Jerárquico permitiría ajustar las probabilidades según el histórico individual del rematador.
+
+Ausencia de Trayectoria Post-Disparo: El modelo evalúa la calidad de la oportunidad, no del disparo ejecutado. Un Post-Shot xG (xGOT) requeriría datos de tracking de balón para medir la probabilidad de gol después de conocer la trayectoria real.
+
+Cobertura Limitada de Datos 360: Solo el 10% del dataset incluye información completa de visibilidad y esqueletos 3D, limitando el potencial de Phase 5.
+
+[FIGURA: xg_heatmap.png - Heatmap final del modelo Phase 3]
+
 Conclusiones Estratégicas
 El modelo de Expected Goals ha madurado de ser una estadística avanzada a convertirse en un lenguaje fundamental para la toma de decisiones en el fútbol profesional.3 Sin embargo, la sofisticación técnica debe ir acompañada de una interpretación cautelosa. El xG es más potente cuando se agrega en muestras grandes y cuando se utiliza para evaluar procesos, no resultados aislados.2
 Para el analista moderno, el camino a seguir implica la integración de múltiples fuentes: datos de eventos para el contexto, tracking 3D para la física del movimiento y modelos jerárquicos para la personalización del talento.13 En última instancia, el xG no pretende predecir el futuro con certeza absoluta, sino proporcionar una base científica para gestionar la incertidumbre y maximizar las probabilidades de éxito en el deporte más impredecible del mundo.

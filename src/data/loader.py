@@ -152,6 +152,10 @@ def load_shot_events_with_360(data_dir: str = "data/raw", use_cache: bool = True
             events_360 = json.load(f)
 
         for event_360 in events_360:
+            # Skip if not a dict (malformed data)
+            if not isinstance(event_360, dict):
+                continue
+
             event_uuid = event_360.get('event_uuid')
             if event_uuid:
                 three_sixty_map[event_uuid] = {

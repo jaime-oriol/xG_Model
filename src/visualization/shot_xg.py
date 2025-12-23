@@ -300,7 +300,7 @@ def plot_shot_xg(csv_path, filter_by='all', invert_filter=False, logo_path=None,
     try:
         current_dir = os.path.dirname(os.path.abspath(__file__))
         project_root = os.path.dirname(current_dir)
-        logo_path_fd = os.path.join(project_root, "blog", "logo", "Logo-blanco.png")
+        logo_path_fd = os.path.join(project_root, "src", "logo", "logo_blanco.png")
         logo = Image.open(logo_path_fd)
         logo_ax = fig.add_axes([0.67, -0.018, 0.28, 0.12])  # [x, y, width, height]
         logo_ax.imshow(logo)
