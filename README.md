@@ -42,7 +42,7 @@ Selected for three critical advantages:
 **Features:** Geometric variables (distance, angle, coordinates), shot type, body part, technique
 **Result:** Establishes baseline performance
 
-### Phase 2: Freeze Frames (Brier: 0.072)
+### Phase 2: Freeze Frames (Brier: 0.072) - **Pure xG**
 **Features Added:** Defensive pressure metrics from player positions
 - keeper_distance_from_line
 - defenders_in_triangle
@@ -51,14 +51,22 @@ Selected for three critical advantages:
 
 **Impact:** 15% improvement - captures 80% of model's added value
 
-### Phase 3: Shot Height (Brier: 0.0648)
+**✓ RECOMMENDED:** Phase 2 uses exclusively **PRE-SHOT** features (position, defenders, shot type). This is the model to use for fair comparisons with StatsBomb and other commercial xG models.
+
+**Phase 2 Tuned:** Hyperparameter-optimized version via RandomizedSearchCV (50 iterations, 5-fold CV) - recommended for production use.
+
+### Phase 3: Shot Height (Brier: 0.0648) - **Post-Shot xG**
 **Features Added:** Vertical trajectory data
-- shot_height (Z coordinate)
+- shot_height (Z coordinate from end_location)
 - is_header_aerial_won
 - keeper_forward_high_shot
 
+**⚠️ IMPORTANT:** Phase 3 uses `shot_height` extracted from `end_location[2]`, which represents where the ball **ended up** (height at goal, in keeper's hands, out of bounds). This is **POST-SHOT** information not available at the moment of the shot. Phase 3 is technically a **Post-Shot xG (xGOT)** model that measures both opportunity quality (pre-shot) and execution quality (post-shot).
+
 **Result:** Best model - beats target and StatsBomb baseline
 **Top Feature:** shot_height (gain: 101.8)
+
+**For fair comparisons with pure xG models (like StatsBomb), use Phase 2.**
 
 ### Phase 4: Contextual (Brier: 0.0649)
 **Features Added:** first_time, under_pressure, one_on_one
@@ -102,22 +110,36 @@ xG_Model/
 
 ## Usage
 
-### Training Phase 3 Model
+### Training Models
 
+**Phase 2 (Pure xG - Recommended for comparisons):**
+```bash
+python -m src.models.train_phase2
+```
+
+**Phase 3 (Post-Shot xG):**
 ```bash
 python -m src.models.train_phase3
 ```
+
+### Hyperparameter Tuning
+
+**Phase 2 Tuning (Recommended):**
+```bash
+python -m src.models.tune_phase2
+```
+Generates `models/phase2_tuned.json` - optimized pure xG model.
+
+**Phase 3 Tuning:**
+```bash
+python -m src.models.tune_phase3
+```
+Generates `models/phase3_tuned.json` - optimized post-shot xG model.
 
 ### Validation with Train/Test Split
 
 ```bash
 python -m src.models.validate_phase3
-```
-
-### Hyperparameter Tuning
-
-```bash
-python -m src.models.tune_phase3
 ```
 
 ### Generate Visualizations
@@ -173,7 +195,10 @@ jupyter notebook notebooks/generate_all_visualizations.ipynb
 ## Limitations
 
 1. **Average Player Assumption:** Model does not account for individual shooter skill
-2. **No Post-Shot Data:** Evaluates opportunity quality, not execution quality
+2. **Post-Shot vs Pre-Shot xG:**
+   - **Phase 2 (Pure xG):** No post-shot data - evaluates opportunity quality only
+   - **Phase 3 (Post-Shot xG):** Includes shot_height from end_location - measures both opportunity and execution quality
+   - For fair comparisons with commercial xG models, use Phase 2
 3. **Limited 360 Coverage:** Only 10% of shots have complete spatial data
 4. **Temporal Invariance:** Does not model game state or tactical evolution
 

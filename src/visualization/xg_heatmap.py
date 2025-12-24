@@ -98,30 +98,24 @@ def plot_xg_heatmap(model_path='models/phase1_baseline.json',
     mpl.rcParams['xtick.labelsize'] = 10
     mpl.rcParams['ytick.labelsize'] = 10
 
-    # Custom colormap: white → Football Decoded corporate blue
-    corporate_blue = '#1E3A8A'
-    colors = ['white', corporate_blue]
-    n_bins = 100
-    cmap = mcolors.LinearSegmentedColormap.from_list('white_blue', colors, N=n_bins)
-
     # Create pitches
     pitch = VerticalPitch(half=True, pitch_color='#313332', line_color='white', linewidth=1, stripe=False)
     fig, ax = pitch.grid(nrows=1, ncols=2, grid_height=0.75, space=0.1, axis=False)
     fig.set_size_inches(10, 5.5)
     fig.set_facecolor('#313332')
 
-    # Add xG heatmaps with Football Decoded colormap
-    pos1 = ax['pitch'][0].imshow(prob_goal_grnd, extent=(80, 0, 60, 120), aspect='equal',
-                                  vmin=-0.04, vmax=0.4, cmap=cmap)
-    pos2 = ax['pitch'][1].imshow(prob_goal_head, extent=(80, 0, 60, 120), aspect='equal',
-                                  vmin=-0.04, vmax=0.4, cmap=cmap)
+    # Add xG heatmaps with inferno colormap (inverted arrays to fix coordinate system)
+    pos1 = ax['pitch'][0].imshow(np.flipud(prob_goal_grnd), extent=(80, 0, 60, 120), aspect='equal',
+                                  vmin=-0.04, vmax=0.4, cmap=plt.cm.inferno)
+    pos2 = ax['pitch'][1].imshow(np.flipud(prob_goal_head), extent=(80, 0, 60, 120), aspect='equal',
+                                  vmin=-0.04, vmax=0.4, cmap=plt.cm.inferno)
 
-    # Add contour lines
-    cs1 = ax['pitch'][0].contour(prob_goal_grnd, extent=(1, 80, 120, 60),
+    # Add contour lines (also inverted)
+    cs1 = ax['pitch'][0].contour(np.flipud(prob_goal_grnd), extent=(1, 80, 120, 60),
                                   levels=[0.01, 0.05, 0.2, 0.5],
                                   colors=['darkgrey', 'darkgrey', 'darkgrey', 'k'],
                                   linestyles='dotted')
-    cs2 = ax['pitch'][1].contour(prob_goal_head, extent=(1, 80, 120, 60),
+    cs2 = ax['pitch'][1].contour(np.flipud(prob_goal_head), extent=(1, 80, 120, 60),
                                   levels=[0.01, 0.05, 0.2, 0.5],
                                   colors=['darkgrey', 'darkgrey', 'darkgrey', 'k'],
                                   linestyles='dotted')
@@ -139,7 +133,7 @@ def plot_xg_heatmap(model_path='models/phase1_baseline.json',
     cbar.ax.set_ylabel('xG', loc="bottom", color="white", fontweight="bold", rotation=0, labelpad=20)
 
     # Footer - Football Decoded style
-    fig.text(0.025, -0.075, 'Created by Jaime Oriol', fontweight='bold', fontsize=14, color='white')
+    fig.text(0.04, -0.06, 'Created by Jaime Oriol', fontweight='bold', fontsize=14, color='white')
 
     # Logo - Football Decoded
     current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -147,7 +141,7 @@ def plot_xg_heatmap(model_path='models/phase1_baseline.json',
     logo_path_fd = os.path.join(project_root, 'src', 'logo', 'logo_blanco.png')
     try:
         logo = Image.open(logo_path_fd)
-        logo_ax = fig.add_axes([0.725, -0.125, 0.35, 0.175])
+        logo_ax = fig.add_axes([0.65, -0.175, 0.4, 0.2])
         logo_ax.imshow(logo)
         logo_ax.axis('off')
     except:

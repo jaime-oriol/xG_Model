@@ -53,88 +53,70 @@ import os
 BACKGROUND_COLOR = '#313332'  # Professional dark theme
 PITCH_COLOR = '#313332'       # Seamless pitch integration
 
-def plot_shot_xg(csv_path, filter_by='all', invert_filter=False, logo_path=None, 
-                 title_text=None, subtitle_text=None, subsubtitle_text=None):
+def plot_shot_xg(predictions_df, competition_id=None, season_id=None, xg_column='my_xg',
+                 logo_path=None, title_text=None, subtitle_text=None, subsubtitle_text=None):
     """
-    Create focused xG visualization with flexible filtering options.
-    
+    Create focused xG visualization from predictions DataFrame.
+
     Generates half-pitch xG analysis with comprehensive statistical panel.
-    Supports filtering by team or individual player for detailed analysis.
-    
+
     Features:
-    - Dynamic filtering system (all teams, single team, individual player)
+    - Competition/season filtering for specific tournaments
     - Shot type differentiation with appropriate markers
     - Outcome-based visual encoding (opacity, outlines)
     - Extreme scenario highlighting (best/worst xG cases)
     - Comprehensive statistical analysis panel
-    - Automatic title generation based on filter selection
-    
+    - Supports both my_xg and statsbomb_xg columns
+
     Args:
-        csv_path: Path to shots CSV file from match data processing
-        filter_by: Filter criteria ('all', team name, or player name)
-        invert_filter: If True, inverts the filter (show everything EXCEPT filter_by)
-        logo_path: Optional path to team/player logo image
+        predictions_df: DataFrame with predictions (from predictions_cache.pkl)
+        competition_id: Filter by competition (e.g., 55 for UEFA Euro)
+        season_id: Filter by season (e.g., 282 for 2024)
+        xg_column: Column to use for xG ('my_xg' or 'statsbomb_xg')
+        logo_path: Optional path to competition/team logo image
         title_text: Custom title (auto-generated if None)
-        subtitle_text: Custom subtitle (auto-generated if None) 
+        subtitle_text: Custom subtitle (auto-generated if None)
         subsubtitle_text: Custom sub-subtitle (auto-generated if None)
-        
+
     Returns:
         matplotlib Figure object with xG analysis
-        
+
     Note:
         Half-pitch visualization focuses on attacking scenarios
-        Coordinate system uses Opta standard with Y-axis flipping
+        Coordinate system uses StatsBomb standard (120x80 yards)
         Statistical panel includes performance vs expectation analysis
     """
-    # Load shots data from processed match CSV
-    shots_df = pd.read_csv(csv_path)
+    # Filter by competition/season if specified
+    shots_df = predictions_df.copy()
+    if competition_id is not None and 'competition_id' in shots_df.columns:
+        shots_df = shots_df[shots_df['competition_id'] == competition_id]
+    if season_id is not None and 'season_id' in shots_df.columns:
+        shots_df = shots_df[shots_df['season_id'] == season_id]
     
     # Unified typography system
     font = 'DejaVu Sans'
-    
+
     # Unified colormap system matching FootballDecoded modules
     node_cmap = mcolors.LinearSegmentedColormap.from_list("", [
-        'deepskyblue', 'cyan', 'lawngreen', 'yellow', 
+        'deepskyblue', 'cyan', 'lawngreen', 'yellow',
         'gold', 'lightpink', 'tomato'
     ])
-    
-    # Extract competition context for automatic title generation
-    teams = shots_df['team'].unique()
-    comp_name = f"{teams[0]} vs {teams[1]}" if len(teams) == 2 else teams[0]
-    
-    # DYNAMIC FILTERING SYSTEM: Support all/team/player analysis with optional inversion
-    comp_selected = 0  # Flag for title generation logic
-    if filter_by.lower() == 'all':
-        selected_shots = shots_df
-        comp_selected = 1  # Competition-level analysis
-    elif filter_by in shots_df['team'].values:
-        if invert_filter:
-            selected_shots = shots_df[shots_df['team'] != filter_by]
-        else:
-            selected_shots = shots_df[shots_df['team'] == filter_by]
-        comp_selected = 0  # Team-level analysis
-    elif filter_by in shots_df['player'].values:
-        if invert_filter:
-            selected_shots = shots_df[shots_df['player'] != filter_by]
-        else:
-            selected_shots = shots_df[shots_df['player'] == filter_by]
-        comp_selected = 0  # Player-level analysis
-    else:
-        player_matches = shots_df[shots_df['player'].str.contains(filter_by, case=False, na=False)]
-        if not player_matches.empty:
-            if invert_filter:
-                selected_shots = shots_df[~shots_df['player'].str.contains(filter_by, case=False, na=False)]
-            else:
-                selected_shots = player_matches
-            comp_selected = 0
-        else:
-            print(f"No data found for: {filter_by}")
-            return None
-    
+
+    # Use all filtered shots (competition-level analysis)
+    selected_shots = shots_df.copy()
+    comp_selected = 1  # Flag for title generation
+
     # PREPARE DATA: Add computed fields for visualization logic
-    selected_shots = selected_shots.copy()
-    selected_shots['header_tag'] = (selected_shots['shot_body_part'] == 'Head').astype(int)  # Header identification
-    selected_shots['goal'] = selected_shots['is_goal'].fillna(0).astype(int)           # Goal flag for filtering
+    # Detect headers from body_part columns (one-hot encoded)
+    if 'body_part_Head' in selected_shots.columns:
+        selected_shots['header_tag'] = selected_shots['body_part_Head'].astype(int)
+    else:
+        selected_shots['header_tag'] = 0  # Default to foot shots if no body_part data
+
+    selected_shots['goal'] = selected_shots['is_goal'].fillna(0).astype(int)
+
+    # Rename xG column to 'xg' for consistency with rest of code
+    selected_shots['xg'] = selected_shots[xg_column]
     
     # DATA SEGMENTATION: Separate by shot type and outcome for layered visualization
     selected_ground_shots = selected_shots[selected_shots['header_tag']==0]           # Foot shots
@@ -151,11 +133,11 @@ def plot_shot_xg(csv_path, filter_by='all', invert_filter=False, logo_path=None,
     mpl.rcParams['ytick.color'] = "white"
     mpl.rcParams['xtick.labelsize'] = 10
     mpl.rcParams['ytick.labelsize'] = 10
-    
-    # PITCH SETUP: Half-pitch configuration for attacking focus
-    pitch = VerticalPitch(pitch_type='opta', half=True, pitch_color=PITCH_COLOR, 
+
+    # PITCH SETUP: Half-pitch configuration for attacking focus (StatsBomb 120x80)
+    pitch = VerticalPitch(pitch_type='statsbomb', half=True, pitch_color=PITCH_COLOR,
                          line_color='white', linewidth=1, stripe=False)
-    fig, ax = pitch.grid(nrows=1, ncols=1, title_height=0.03, grid_height=0.7, 
+    fig, ax = pitch.grid(nrows=1, ncols=1, title_height=0.03, grid_height=0.7,
                         endnote_height=0.05, axis=False)
     fig.set_size_inches(9, 7)
     fig.set_facecolor(BACKGROUND_COLOR)
@@ -252,12 +234,13 @@ def plot_shot_xg(csv_path, filter_by='all', invert_filter=False, logo_path=None,
     
     # Títulos con defaults automáticos
     if not title_text:
-        title_text = "Expected Goals" if comp_selected == 1 else f"{filter_by} Expected Goals"
+        model_name = "Football Decoded" if xg_column == 'my_xg' else "StatsBomb"
+        title_text = f"Expected Goals - {model_name} Model"
     if not subtitle_text:
-        subtitle_text = comp_name
+        subtitle_text = f"{len(selected_shots)} shots analyzed"
     if not subsubtitle_text:
-        subsubtitle_text = "2024-25"
-    
+        subsubtitle_text = "StatsBomb Open Data"
+
     fig.text(0.18, 0.92, title_text, fontweight="bold", fontsize=16, color='w', fontfamily=font)
     fig.text(0.18, 0.883, subtitle_text, fontweight="regular", fontsize=13, color='w', fontfamily=font)
     fig.text(0.18, 0.852, subsubtitle_text, fontweight="regular", fontsize=10, color='w', fontfamily=font)
@@ -288,28 +271,28 @@ def plot_shot_xg(csv_path, filter_by='all', invert_filter=False, logo_path=None,
     
     # Valores derecha
     shot_count = selected_shots.count()[0]
-    fig.text(0.89, 0.925, f"{round(selected_shots['xg'].sum()/shot_count, 2)}", fontweight="regular", fontsize=10, color='w', fontfamily=font)
-    fig.text(0.89, 0.9, f"{round(selected_shots['goal'].sum()/shot_count, 2)}", fontweight="regular", fontsize=10, color='w', fontfamily=font)
-    fig.text(0.89, 0.875, f"{round(lowest_xg_goal['xg'].iloc[0], 2)}" if not lowest_xg_goal.empty else "N/A", fontweight="regular", fontsize=10, color='w', fontfamily=font)
-    fig.text(0.89, 0.85, f"{round(highest_xg_miss['xg'].iloc[0], 2)}" if not highest_xg_miss.empty else "N/A", fontweight="regular", fontsize=10, color='w', fontfamily=font)
+    fig.text(0.89, 0.925, f"{selected_shots['xg'].sum()/shot_count:.2f}", fontweight="regular", fontsize=10, color='w', fontfamily=font)
+    fig.text(0.89, 0.9, f"{selected_shots['goal'].sum()/shot_count:.2f}", fontweight="regular", fontsize=10, color='w', fontfamily=font)
+    fig.text(0.89, 0.875, f"{lowest_xg_goal['xg'].iloc[0]:.2f}" if not lowest_xg_goal.empty else "N/A", fontweight="regular", fontsize=10, color='w', fontfamily=font)
+    fig.text(0.89, 0.85, f"{highest_xg_miss['xg'].iloc[0]:.2f}" if not highest_xg_miss.empty else "N/A", fontweight="regular", fontsize=10, color='w', fontfamily=font)
     
     # UNIFIED FOOTER: Consistent FootballDecoded branding
-    fig.text(0.085 , 0.02, "Created by Jaime Oriol", fontweight='bold', fontsize=10, color="white", fontfamily=font)
-    
-    # Logo Football Decoded
+    fig.text(0.085, 0.02, "Created by Jaime Oriol", fontweight='bold', fontsize=10, color="white", fontfamily=font)
+
+    # Logo Football Decoded (bottom right)
     try:
         current_dir = os.path.dirname(os.path.abspath(__file__))
-        project_root = os.path.dirname(current_dir)
+        project_root = os.path.dirname(os.path.dirname(current_dir))
         logo_path_fd = os.path.join(project_root, "src", "logo", "logo_blanco.png")
-        logo = Image.open(logo_path_fd)
-        logo_ax = fig.add_axes([0.67, -0.018, 0.28, 0.12])  # [x, y, width, height]
-        logo_ax.imshow(logo)
-        logo_ax.axis('off')
+        logo_fd = Image.open(logo_path_fd)
+        logo_ax_fd = fig.add_axes([0.67, -0.018, 0.28, 0.12])
+        logo_ax_fd.imshow(logo_fd)
+        logo_ax_fd.axis('off')
     except Exception as e:
         # Fallback al texto si no se encuentra la imagen
         fig.text(0.7, 0.02, "Football Decoded", fontweight='bold', fontsize=14, color="white", fontfamily=font)
-    
-    # Logo opcional
+
+    # Logo de competición/equipo (top left)
     if logo_path and os.path.exists(logo_path):
         ax_logo = fig.add_axes([0.05, 0.82, 0.135, 0.135])
         ax_logo.axis("off")

@@ -12,8 +12,8 @@ from src.features.geometric import calculate_basic_features
 from src.features.freeze_frame import calculate_freeze_frame_features
 from src.features.shot_height import calculate_shot_height_features
 
-def prepare_predictions(model_path='models/phase3_tuned.json',
-                       features_path='models/phase3_features.txt',
+def prepare_predictions(model_path='models/phase2_tuned.json',
+                       features_path='models/phase2_tuned_features.txt',
                        output_path='data/processed/predictions_cache.pkl'):
     """
     Process features and predictions once, save for visualizations
